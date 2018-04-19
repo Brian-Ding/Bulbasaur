@@ -16,7 +16,7 @@ namespace Bulbasaur.DataFetcher
         // **********************************************
 
         // Replace the accessKey string value with your valid access key.
-        const string accessKey = "5dbcb693ed0f4ea4855536dfd6c06002";
+        const string accessKey = "b3ba9dfa919f4c2d814b2d570fc0636d";
 
         // Verify the endpoint URI.  At this writing, only one endpoint is used for Bing
         // search APIs.  In the future, regional endpoints may be available.  If you
@@ -40,7 +40,7 @@ namespace Bulbasaur.DataFetcher
 
             if (accessKey.Length == 32)
             {
-                for (int i = 23; i < searchTerms.Length; i++)
+                for (int i = 784; i < searchTerms.Length; i++)
                 {
                     Console.WriteLine("Searching the Web for: " + searchTerms[i]);
                     List<String> results = new List<String>();
@@ -70,8 +70,9 @@ namespace Bulbasaur.DataFetcher
 
                         Thread.Sleep(TimeSpan.FromSeconds(0.3));
                     }
-                    Directory.CreateDirectory($"..\\..\\..\\..\\..\\Data\\{searchTerms[i]}");
-                    File.WriteAllLines($"..\\..\\..\\..\\..\\Data\\{searchTerms[i]}\\result.txt", results);
+                    String folder = searchTerms[i].Replace(":", "");
+                    Directory.CreateDirectory($"..\\..\\..\\..\\..\\Data\\{folder}");
+                    File.WriteAllLines($"..\\..\\..\\..\\..\\Data\\{folder}\\result.txt", results);
                     Console.WriteLine("\n\n");
                 }
             }
