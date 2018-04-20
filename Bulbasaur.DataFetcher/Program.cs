@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Bulbasaur.DataFetcher
 {
@@ -34,53 +36,7 @@ namespace Bulbasaur.DataFetcher
 
         static void Main(string[] args)
         {
-            Assembly assembly = Assembly.GetExecutingAssembly();
-            Console.OutputEncoding = Encoding.UTF8;
-            String[] searchTerms = File.ReadAllLines("..\\..\\..\\..\\..\\Names.txt");
-
-            if (accessKey.Length == 32)
-            {
-                for (int i = 784; i < searchTerms.Length; i++)
-                {
-                    Console.WriteLine("Searching the Web for: " + searchTerms[i]);
-                    List<String> results = new List<String>();
-                    Int32 offset = 0;
-                    Int32 totalEstimatedMatches = 1;
-                    Int32 count = 0;
-                    while (!(results.Count >= 500 || offset >= totalEstimatedMatches))
-                    {
-                        SearchResult result = BingWebSearch(searchTerms[i] + $"&offset={offset}");
-                        count++;
-                        Match match = Regex.Match(result.jsonResult, "nextOffset\": (\\d+)");
-                        if (match.Success)
-                        {
-                            offset = Int32.Parse(Regex.Match(result.jsonResult, "nextOffset\": (\\d+)").Groups[1].Value);
-                            totalEstimatedMatches = Int32.Parse(Regex.Match(result.jsonResult, "totalEstimatedMatches\": (\\d+)").Groups[1].Value);
-                        }
-                        else
-                        {
-                            break;
-                        }
-
-                        MatchCollection matches = Regex.Matches(result.jsonResult, "\"contentUrl\": \".+? \"");
-                        for (int j = 0; j < matches.Count; j++)
-                        {
-                            results.Add(Regex.Matches(result.jsonResult, "\"contentUrl\": \"(.+?) \"")[j].Groups[1].Value.Replace("\",", "").Replace("\\", ""));
-                        }
-
-                        Thread.Sleep(TimeSpan.FromSeconds(0.3));
-                    }
-                    String folder = searchTerms[i].Replace(":", "");
-                    Directory.CreateDirectory($"..\\..\\..\\..\\..\\Data\\{folder}");
-                    File.WriteAllLines($"..\\..\\..\\..\\..\\Data\\{folder}\\result.txt", results);
-                    Console.WriteLine("\n\n");
-                }
-            }
-            else
-            {
-                Console.WriteLine("Invalid Bing Search API subscription key!");
-                Console.WriteLine("Please paste yours into the source code.");
-            }
+            DownloadImage();
 
             Console.Write("\nPress Enter to exit ");
             Console.ReadLine();
@@ -188,6 +144,122 @@ namespace Bulbasaur.DataFetcher
             }
 
             return sb.ToString().Trim();
+        }
+
+        static void SearchImage()
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+            String[] searchTerms = File.ReadAllLines("..\\..\\..\\..\\..\\Names.txt");
+
+            if (accessKey.Length == 32)
+            {
+                for (int i = 784; i < searchTerms.Length; i++)
+                {
+                    Console.WriteLine("Searching the Web for: " + searchTerms[i]);
+                    List<String> results = new List<String>();
+                    Int32 offset = 0;
+                    Int32 totalEstimatedMatches = 1;
+                    Int32 count = 0;
+                    while (!(results.Count >= 500 || offset >= totalEstimatedMatches))
+                    {
+                        SearchResult result = BingWebSearch(searchTerms[i] + $"&offset={offset}");
+                        count++;
+                        Match match = Regex.Match(result.jsonResult, "nextOffset\": (\\d+)");
+                        if (match.Success)
+                        {
+                            offset = Int32.Parse(Regex.Match(result.jsonResult, "nextOffset\": (\\d+)").Groups[1].Value);
+                            totalEstimatedMatches = Int32.Parse(Regex.Match(result.jsonResult, "totalEstimatedMatches\": (\\d+)").Groups[1].Value);
+                        }
+                        else
+                        {
+                            break;
+                        }
+
+                        MatchCollection matches = Regex.Matches(result.jsonResult, "\"contentUrl\": \".+? \"");
+                        for (int j = 0; j < matches.Count; j++)
+                        {
+                            results.Add(Regex.Matches(result.jsonResult, "\"contentUrl\": \"(.+?) \"")[j].Groups[1].Value.Replace("\",", "").Replace("\\", ""));
+                        }
+
+                        Thread.Sleep(TimeSpan.FromSeconds(0.3));
+                    }
+                    String folder = searchTerms[i].Replace(":", "");
+                    Directory.CreateDirectory($"..\\..\\..\\..\\..\\Data\\{folder}");
+                    File.WriteAllLines($"..\\..\\..\\..\\..\\Data\\{folder}\\result.txt", results);
+                    Console.WriteLine("\n\n");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Invalid Bing Search API subscription key!");
+                Console.WriteLine("Please paste yours into the source code.");
+            }
+        }
+
+        static void DownloadImage()
+        {
+            Boolean rerun = true;
+            while (rerun)
+            {
+                rerun = false;
+                String[] directories = Directory.GetDirectories("Data");
+                for (int i = 0; i < directories.Length; i++)
+                {
+                    Console.WriteLine("Downloading\t" + i.ToString() + "\t" + directories[i].Replace("Data\\", " ") + "...");
+                    String path = Path.Combine(Directory.GetCurrentDirectory(), directories[i]);
+                    DirectoryInfo directoryInfo = new DirectoryInfo(path);
+
+                    String[] urls = File.ReadAllLines(Path.Combine(Directory.GetCurrentDirectory(), directories[i], "result.txt"));
+
+                    List<String> failed = new List<string>();
+                    for (int j = 0; j < urls.Length; j++)
+                    {
+                        try
+                        {
+                            WebRequest request = HttpWebRequest.Create(urls[j]);
+                            var task = Task.Factory.FromAsync(request.BeginGetResponse, request.EndGetResponse, null);
+                            if (!task.Wait(TimeSpan.FromMinutes(2)))
+                            {
+                                throw new TimeoutException();
+                            }
+                            WebResponse response = task.Result;
+                            Stream stream = response.GetResponseStream();
+                            MemoryStream memoryStream = new MemoryStream();
+                            stream.CopyTo(memoryStream);
+                            Byte[] buffer = memoryStream.ToArray();
+                            String extension = "." + response.ContentType.Split('/')[1];
+                            Int32 count = Directory.GetFiles(Path.Combine(Directory.GetCurrentDirectory(), directories[i])).Length;
+                            File.WriteAllBytes(Path.Combine(path, count.ToString() + extension), buffer);
+
+
+                            response.Dispose();
+                            stream.Dispose();
+                            memoryStream.Dispose();
+
+
+                            Console.WriteLine("Succeed!");
+                        }
+                        catch (Exception exception)
+                        {
+                            failed.Add(urls[j]);
+                            Console.WriteLine("Error!");
+                        }
+                    }
+
+                    File.Delete(Path.Combine(Directory.GetCurrentDirectory(), directories[i], "result.txt"));
+                    if (failed.Count != 0)
+                    {
+                        rerun = true;
+                        File.WriteAllLines(Path.Combine(Directory.GetCurrentDirectory(), directories[i], "result.txt"), failed);
+                    }
+                    else
+                    {
+                        File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), directories[i], "result.txt"), String.Empty);
+                    }
+
+                    Console.WriteLine("\n\n");
+                }
+            }
         }
 
     }
